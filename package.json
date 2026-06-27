@@ -1,0 +1,47 @@
+{
+  "name": "discord-music-bot",
+  "version": "1.0.0",
+  "description": "버튼/모달 UI 기반 디스코드 음악봇 + Electron 컨트롤 패널 (discord.js v14, yt-dlp 자체 내장 재생)",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "panel": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
+    "ffmpeg-static": "^5.3.0",
+    "libsodium-wrappers": "^0.8.4",
+    "opusscript": "^0.0.8",
+    "youtube-dl-exec": "^3.1.8"
+  },
+  "build": {
+    "appId": "com.yj.musicbot",
+    "productName": "YJ Music Bot",
+    "asar": false,
+    "files": [
+      "**/*",
+      "!**/*.log",
+      "!.env",
+      "!.env.example",
+      "!.claude/**",
+      "!.git/**",
+      "!dist/**"
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "YJ-MusicBot.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3"
+  }
+}
