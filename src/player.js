@@ -9,6 +9,7 @@ import {
   StreamType,
   entersState,
 } from '@discordjs/voice';
+import prism from 'prism-media';
 import { createStream } from './ytsource.js';
 import { panelEmbed, panelRows } from './ui.js';
 
@@ -52,6 +53,8 @@ class GuildMusicPlayer {
   }
 
   connect(voiceChannel) {
+    // 음질: 채널이 허용하는 최대 비트레이트 기억 (없으면 96kbps)
+    this.bitrate = voiceChannel.bitrate || 96000;
     if (this.connection && this.connection.joinConfig.channelId === voiceChannel.id) return;
     this.connection = joinVoiceChannel({
       channelId: voiceChannel.id,
@@ -60,6 +63,10 @@ class GuildMusicPlayer {
       selfDeaf: true,
     });
     this.connection.subscribe(this.player);
+
+    entersState(this.connection, VoiceConnectionStatus.Ready, 15000).catch(() =>
+      console.error('❌ 음성 연결이 15초 내 Ready 안 됨 — 방화벽/UDP 차단 의심'),
+    );
 
     this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
@@ -97,11 +104,28 @@ class GuildMusicPlayer {
     this.current = track;
     this.paused = false;
 
+    // yt-dlp 로 bestaudio 를 받아, 우리가 직접 ffmpeg 로 채널 비트레이트만큼
+    // 고음질 opus 인코딩 → OggOpus 로 넘김(@discordjs/voice 가 재인코딩 안 함).
     const proc = createStream(track.url);
     this.currentProc = proc;
-    proc.on('error', () => {}); // 종료 시 EPIPE 등 무시
+    proc.on('error', () => {});
 
-    const resource = createAudioResource(proc.stdout, { inputType: StreamType.Arbitrary });
+    const bitrate = Math.min(Math.max(this.bitrate || 96000, 64000), 510000);
+    const ffmpeg = new prism.FFmpeg({
+      args: [
+        '-analyzeduration', '0', '-loglevel', '0',
+        '-i', '-',
+        '-acodec', 'libopus', '-f', 'opus',
+        '-ar', '48000', '-ac', '2',
+        '-b:a', String(bitrate),
+        '-vbr', 'on', '-application', 'audio', '-compression_level', '10',
+      ],
+    });
+    this.currentFfmpeg = ffmpeg;
+    ffmpeg.on('error', () => {});
+    proc.stdout.pipe(ffmpeg);
+
+    const resource = createAudioResource(ffmpeg, { inputType: StreamType.OggOpus });
     this.player.play(resource);
     this.updatePanel();
   }
@@ -116,6 +140,12 @@ class GuildMusicPlayer {
         this.currentProc.kill('SIGKILL');
       } catch {}
       this.currentProc = null;
+    }
+    if (this.currentFfmpeg) {
+      try {
+        this.currentFfmpeg.destroy();
+      } catch {}
+      this.currentFfmpeg = null;
     }
   }
 

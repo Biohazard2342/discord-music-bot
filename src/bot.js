@@ -3,6 +3,10 @@ import ffmpegPath from 'ffmpeg-static';
 // @discordjs/voice 가 ffmpeg-static 을 찾도록 경로 지정 (패키징 시 asar 경로 보정)
 if (ffmpegPath) process.env.FFMPEG_PATH = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
 
+// 안전망: 자식 프로세스/스트림에서 튀는 예외로 봇이 통째로 죽지 않게 한다.
+process.on('unhandledRejection', (r) => console.error('⚠️ unhandledRejection:', r?.message ?? r));
+process.on('uncaughtException', (e) => console.error('⚠️ uncaughtException:', e?.message ?? e));
+
 import {
   Client,
   GatewayIntentBits,

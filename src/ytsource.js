@@ -74,7 +74,7 @@ export async function resolvePlaylist(input) {
  * @returns child_process (proc.stdout 이 오디오 스트림)
  */
 export function createStream(url) {
-  return ytdl.exec(
+  const proc = ytdl.exec(
     url,
     {
       output: '-',
@@ -85,4 +85,8 @@ export function createStream(url) {
     },
     { stdio: ['ignore', 'pipe', 'ignore'] },
   );
+  // youtube-dl-exec 의 반환값은 promise 이기도 함. 곡 종료/스킵(SIGKILL) 시
+  // 이 promise 가 reject 되는데, 안 잡으면 unhandledRejection 으로 봇이 죽는다.
+  proc.catch(() => {});
+  return proc;
 }
