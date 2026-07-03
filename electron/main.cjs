@@ -1,6 +1,9 @@
 // Electron 메인 프로세스: 창 생성 + 봇 제어 IPC + 자격증명 저장
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
+
+// 단순 패널 UI 라 GPU 가속 불필요 — 끄면 GPU 프로세스 RAM 을 크게 아낀다.
+app.disableHardwareAcceleration();
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 

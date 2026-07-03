@@ -23,7 +23,13 @@
   "build": {
     "appId": "com.yj.musicbot",
     "productName": "YJ Music Bot",
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/youtube-dl-exec/bin/**"
+    ],
+    "compression": "maximum",
+    "electronLanguages": ["ko", "en-US"],
     "files": [
       "**/*",
       "!**/*.log",

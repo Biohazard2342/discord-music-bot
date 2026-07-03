@@ -1,6 +1,10 @@
 // yt-dlp(youtube-dl-exec) 래퍼: 곡 정보 조회 + 오디오 스트림/캐시 다운로드
-import ytdl from 'youtube-dl-exec';
+import ytdlPkg from 'youtube-dl-exec';
 import { createHash } from 'node:crypto';
+
+// asar 패키징 시 아카이브 안의 exe 는 실행 불가 → unpacked 경로로 보정
+const YTDLP_BIN = ytdlPkg.constants.YOUTUBE_DL_PATH.replace('app.asar', 'app.asar.unpacked');
+const ytdl = ytdlPkg.create(YTDLP_BIN);
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
