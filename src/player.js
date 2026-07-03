@@ -10,7 +10,7 @@ import {
   entersState,
 } from '@discordjs/voice';
 import prism from 'prism-media';
-import { createStream } from './ytsource.js';
+import { createStream, downloadTrack } from './ytsource.js';
 import { panelEmbed, panelRows } from './ui.js';
 
 const players = new Map(); // guildId -> GuildMusicPlayer
@@ -82,17 +82,17 @@ class GuildMusicPlayer {
 
   enqueue(track) {
     this.queue.push(track);
-    if (!this.current) this._playNext();
+    if (!this.current) this._playNext().catch(() => {});
     else this.updatePanel();
   }
 
   enqueueMany(tracks) {
     this.queue.push(...tracks);
-    if (!this.current) this._playNext();
+    if (!this.current) this._playNext().catch(() => {});
     else this.updatePanel();
   }
 
-  _playNext() {
+  async _playNext() {
     this._killProc();
     const track = this.queue.shift();
     if (!track) {
@@ -103,35 +103,49 @@ class GuildMusicPlayer {
     }
     this.current = track;
     this.paused = false;
+    this.updatePanel();
 
-    // yt-dlp 로 bestaudio 를 받아, 우리가 직접 ffmpeg 로 채널 비트레이트만큼
-    // 고음질 opus 인코딩 → OggOpus 로 넘김(@discordjs/voice 가 재인코딩 안 함).
-    const proc = createStream(track.url);
-    this.currentProc = proc;
-    proc.on('error', () => {});
+    // 캐시 우선: 곡을 통째로 받아 로컬 파일에서 재생 — 다운로드하며 재생할 때
+    // 생기는 무음→배속(네트워크 버스트) 증상을 원천 차단한다.
+    let inputFile = null;
+    try {
+      inputFile = await downloadTrack(track.url);
+    } catch {
+      // 라이브 스트림 등 다운로드가 불가능하면 기존 스트리밍으로 폴백
+    }
+    if (this.current !== track) return; // 다운로드 중 스킵/정지됨
 
-    const bitrate = Math.min(Math.max(this.bitrate || 96000, 64000), 510000);
+    const bitrate = Math.min(Math.max(this.bitrate || 96000, 64000), 128000);
     const ffmpeg = new prism.FFmpeg({
       args: [
         '-analyzeduration', '0', '-loglevel', '0',
-        '-i', '-',
+        '-i', inputFile ?? '-',
         '-acodec', 'libopus', '-f', 'opus',
         '-ar', '48000', '-ac', '2',
         '-b:a', String(bitrate),
-        '-vbr', 'on', '-application', 'audio', '-compression_level', '10',
+        '-vbr', 'on', '-application', 'audio', '-compression_level', '5',
       ],
     });
     this.currentFfmpeg = ffmpeg;
     ffmpeg.on('error', () => {});
-    proc.stdout.pipe(ffmpeg);
+
+    if (!inputFile) {
+      const proc = createStream(track.url);
+      this.currentProc = proc;
+      proc.on('error', () => {});
+      proc.stdout.pipe(ffmpeg);
+    }
 
     const resource = createAudioResource(ffmpeg, { inputType: StreamType.OggOpus });
     this.player.play(resource);
     this.updatePanel();
+
+    // 프리페치: 다음 곡을 재생 중에 미리 받아두면 곡 전환이 끊김 없이 즉시 된다.
+    if (this.queue[0]) downloadTrack(this.queue[0].url).catch(() => {});
   }
 
   _onIdle() {
-    this._playNext();
+    this._playNext().catch(() => {});
   }
 
   _killProc() {
@@ -162,7 +176,13 @@ class GuildMusicPlayer {
   }
 
   skip() {
-    if (this.current) this.player.stop(); // Idle 이벤트 → 다음 곡
+    if (!this.current) return;
+    if (this.player.state.status === AudioPlayerStatus.Idle) {
+      // 아직 다운로드 중(재생 시작 전)에 스킵 — Idle 이벤트가 없으므로 직접 다음 곡
+      this._playNext().catch(() => {});
+    } else {
+      this.player.stop(); // Idle 이벤트 → 다음 곡
+    }
   }
 
   /** 사용자 정지: 대기열 비우고 음성 연결 해제 (플레이어 객체/패널은 유지) */
