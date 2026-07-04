@@ -111,6 +111,17 @@ app.whenReady().then(async () => {
       const b = await getBot();
       const status = await b.startBot(loadCreds());
       console.log('[AUTOSTART OK]', JSON.stringify(status));
+      // YJ_DEBUG_PLAY="guildId|channelId|url" 이면 그 음성채널에서 실제 재생 검증
+      if (process.env.YJ_DEBUG_PLAY) {
+        const [gid, cid, ...rest] = process.env.YJ_DEBUG_PLAY.split('|');
+        const title = await b.debugPlay(gid, cid, rest.join('|'));
+        console.log('[DEBUG_PLAY] enqueued:', title);
+        for (let i = 1; i <= 5; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const s = b.getStatus().guilds.find((g) => g.id === gid);
+          console.log(`[DEBUG_PLAY ${i * 3}s]`, JSON.stringify(s));
+        }
+      }
     } catch (e) {
       logError('[AUTOSTART FAIL]', e);
     }

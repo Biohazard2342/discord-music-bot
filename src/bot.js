@@ -315,6 +315,8 @@ export function getStatus() {
         playing: p?.current?.title ?? null,
         paused: !!p?.paused,
         queued: p?.queue?.length ?? 0,
+        playerStatus: p?.player?.state?.status ?? null,
+        playbackMs: p?.player?.state?.resource?.playbackDuration ?? null,
       });
     }
   }
@@ -325,4 +327,16 @@ export function getStatus() {
     lastError: state.lastError,
     guilds,
   };
+}
+
+/** 디버그: 지정한 음성채널에 들어가 URL 재생 (패키징 빌드 원격 검증용) */
+export async function debugPlay(guildId, channelId, url) {
+  if (!client || !state.online) throw new Error('봇이 오프라인입니다.');
+  const guild = await client.guilds.fetch(guildId);
+  const channel = await guild.channels.fetch(channelId);
+  const track = await resolveSingle(url);
+  track.requestedBy = 'debug';
+  const player = getPlayer(guild, channel, null);
+  player.enqueue(track);
+  return track.title;
 }

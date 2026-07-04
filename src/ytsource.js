@@ -5,6 +5,11 @@ import { createHash } from 'node:crypto';
 // asar 패키징 시 아카이브 안의 exe 는 실행 불가 → unpacked 경로로 보정
 const YTDLP_BIN = ytdlPkg.constants.YOUTUBE_DL_PATH.replace('app.asar', 'app.asar.unpacked');
 const ytdl = ytdlPkg.create(YTDLP_BIN);
+
+// ffmpeg 도 동일하게 unpacked 경로로. prism-media 의 자동 탐색은
+// require('ffmpeg-static') 결과(asar 내부 경로)를 실행하려다 실패하므로 쓰지 않는다.
+import ffmpegStatic from 'ffmpeg-static';
+export const FFMPEG_BIN = (ffmpegStatic ?? 'ffmpeg').replace('app.asar', 'app.asar.unpacked');
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';

@@ -9,8 +9,8 @@ import {
   StreamType,
   entersState,
 } from '@discordjs/voice';
-import prism from 'prism-media';
-import { createStream, downloadTrack } from './ytsource.js';
+import { spawn } from 'node:child_process';
+import { createStream, downloadTrack, FFMPEG_BIN } from './ytsource.js';
 import { panelEmbed, panelRows } from './ui.js';
 
 const players = new Map(); // guildId -> GuildMusicPlayer
@@ -82,13 +82,13 @@ class GuildMusicPlayer {
 
   enqueue(track) {
     this.queue.push(track);
-    if (!this.current) this._playNext().catch(() => {});
+    if (!this.current) this._playNext().catch((e) => console.error('▶️ 재생 시작 실패:', e?.message ?? e));
     else this.updatePanel();
   }
 
   enqueueMany(tracks) {
     this.queue.push(...tracks);
-    if (!this.current) this._playNext().catch(() => {});
+    if (!this.current) this._playNext().catch((e) => console.error('▶️ 재생 시작 실패:', e?.message ?? e));
     else this.updatePanel();
   }
 
@@ -110,33 +110,40 @@ class GuildMusicPlayer {
     let inputFile = null;
     try {
       inputFile = await downloadTrack(track.url);
-    } catch {
+    } catch (e) {
       // 라이브 스트림 등 다운로드가 불가능하면 기존 스트리밍으로 폴백
+      console.error('⬇️ 캐시 다운로드 실패, 스트리밍 폴백:', e?.message ?? e);
     }
     if (this.current !== track) return; // 다운로드 중 스킵/정지됨
 
     const bitrate = Math.min(Math.max(this.bitrate || 96000, 64000), 128000);
-    const ffmpeg = new prism.FFmpeg({
-      args: [
+    // prism.FFmpeg 의 자동 탐색은 패키징(asar) 환경에서 ffmpeg 를 못 찾으므로
+    // 정확한 바이너리 경로(FFMPEG_BIN)로 직접 spawn 한다.
+    const ffmpeg = spawn(
+      FFMPEG_BIN,
+      [
         '-analyzeduration', '0', '-loglevel', '0',
-        '-i', inputFile ?? '-',
+        '-i', inputFile ?? 'pipe:0',
         '-acodec', 'libopus', '-f', 'opus',
         '-ar', '48000', '-ac', '2',
         '-b:a', String(bitrate),
         '-vbr', 'on', '-application', 'audio', '-compression_level', '5',
+        'pipe:1',
       ],
-    });
+      { windowsHide: true, stdio: [inputFile ? 'ignore' : 'pipe', 'pipe', 'ignore'] },
+    );
     this.currentFfmpeg = ffmpeg;
-    ffmpeg.on('error', () => {});
+    ffmpeg.on('error', (e) => console.error('ffmpeg 실행 실패:', e?.message ?? e));
 
     if (!inputFile) {
       const proc = createStream(track.url);
       this.currentProc = proc;
       proc.on('error', () => {});
-      proc.stdout.pipe(ffmpeg);
+      ffmpeg.stdin.on('error', () => {}); // 종료 시 EPIPE 무시
+      proc.stdout.pipe(ffmpeg.stdin);
     }
 
-    const resource = createAudioResource(ffmpeg, { inputType: StreamType.OggOpus });
+    const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.OggOpus });
     this.player.play(resource);
     this.updatePanel();
 
@@ -145,7 +152,7 @@ class GuildMusicPlayer {
   }
 
   _onIdle() {
-    this._playNext().catch(() => {});
+    this._playNext().catch((e) => console.error('▶️ 다음 곡 재생 실패:', e?.message ?? e));
   }
 
   _killProc() {
@@ -157,7 +164,7 @@ class GuildMusicPlayer {
     }
     if (this.currentFfmpeg) {
       try {
-        this.currentFfmpeg.destroy();
+        this.currentFfmpeg.kill('SIGKILL');
       } catch {}
       this.currentFfmpeg = null;
     }
