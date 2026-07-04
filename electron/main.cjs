@@ -78,7 +78,44 @@ ipcMain.handle('bot:status', async () => {
 });
 
 // ---------- 앱 생명주기 ----------
-app.whenReady().then(createWindow);
+// 중복 실행 방지: 두 번째로 켜면 새 창 대신 기존 창을 앞으로 가져온다.
+// (봇이 2개 뜨면 상호작용 실패/무음/만료 오류가 나므로 반드시 하나만)
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
+// 진단용 에러 로그 파일 (%APPDATA%/YJ Music Bot/main-error.log)
+function logError(...args) {
+  const line = `[${new Date().toISOString()}] ${args.map((a) => a?.stack ?? String(a)).join(' ')}\n`;
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'main-error.log'), line);
+  } catch {}
+  console.error(line.trim());
+}
+process.on('uncaughtException', (e) => logError('uncaughtException:', e));
+process.on('unhandledRejection', (r) => logError('unhandledRejection:', r));
+
+app.whenReady().then(async () => {
+  createWindow();
+  // 디버그: YJ_DEBUG_AUTOSTART=1 이면 저장된 자격증명으로 봇 자동 시작 (패키징 검증용)
+  if (process.env.YJ_DEBUG_AUTOSTART === '1') {
+    try {
+      const b = await getBot();
+      const status = await b.startBot(loadCreds());
+      console.log('[AUTOSTART OK]', JSON.stringify(status));
+    } catch (e) {
+      logError('[AUTOSTART FAIL]', e);
+    }
+  }
+});
 
 app.on('window-all-closed', async () => {
   try {

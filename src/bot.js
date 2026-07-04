@@ -249,8 +249,20 @@ function buildClient() {
 }
 
 // ---------- 외부 제어 API ----------
-export async function startBot(creds = {}) {
-  if (client && state.online) return getStatus();
+// 시작 중(로그인 완료 전)에 또 호출돼도 같은 작업을 공유한다.
+// 이게 없으면 클라이언트가 2개 생겨 유령 봇이 남는다(상호작용 실패/무음의 원인).
+let startingPromise = null;
+
+export function startBot(creds = {}) {
+  if (startingPromise) return startingPromise;
+  if (client && state.online) return Promise.resolve(getStatus());
+  startingPromise = _startBot(creds).finally(() => {
+    startingPromise = null;
+  });
+  return startingPromise;
+}
+
+async function _startBot(creds) {
   const token = creds.token || config.token;
   const clientId = creds.clientId || config.clientId;
   const guildId = creds.guildId || config.guildId || null;
