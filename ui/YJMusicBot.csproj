@@ -8,7 +8,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>YJMusicBot</AssemblyName>
     <Product>YJ Music Bot</Product>
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
+
+    <!-- 단일 exe: 봇/ffmpeg/yt-dlp 를 내장하고 첫 실행 때 풀어 쓴다 -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <DebugType>none</DebugType>
   </PropertyGroup>
+
+  <ItemGroup Condition="Exists('Resources\bot.zip')">
+    <EmbeddedResource Include="Resources\bot.zip">
+      <LogicalName>bot.zip</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
 </Project>

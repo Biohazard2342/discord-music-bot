@@ -1,6 +1,8 @@
-// 빌드: ① 헤드리스 봇(headless.js) → bot.exe(esbuild 번들 → pkg) + ffmpeg/yt-dlp/davey 사이드카
-//       ② C# WinForms UI → YJ-MusicBot.exe (dotnet publish)
-// 결과: dist/YJ-MusicBot/ { YJ-MusicBot.exe, bot/ { bot.exe, ffmpeg.exe, yt-dlp.exe, node_modules/... } }
+// 단일 exe 빌드:
+//  ① 헤드리스 봇(headless.js) → bot.exe(esbuild→pkg) + ffmpeg/yt-dlp/davey 를 스테이징
+//  ② 스테이징을 bot.zip 으로 압축 → C# 에 내장 리소스로 포함
+//  ③ dotnet publish 단일파일 → dist/YJ-MusicBot.exe (딱 하나)
+// 실행 시 C# 이 내장 bot.zip 을 %LOCALAPPDATA% 로 풀고 bot.exe 를 구동한다.
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -11,17 +13,20 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const dist = path.join(root, 'dist');
-const appDir = path.join(dist, 'YJ-MusicBot');
-const botDir = path.join(appDir, 'bot');
+const stage = path.join(dist, 'bot-stage');
+const pub = path.join(dist, 'pub');
 const bundle = path.join(dist, 'bot-bundle.cjs');
+const botZip = path.join(root, 'ui', 'Resources', 'bot.zip');
+const finalExe = path.join(dist, 'YJ-MusicBot.exe');
 
 const NATIVE_EXTERNALS = ['@snazzah/davey', '@snazzah/davey-win32-x64-msvc'];
 
 fs.rmSync(dist, { recursive: true, force: true });
-fs.mkdirSync(botDir, { recursive: true });
+fs.mkdirSync(stage, { recursive: true });
+fs.mkdirSync(path.dirname(botZip), { recursive: true });
 
 // ① 봇: ESM → 단일 CJS 번들
-console.log('[1/5] 봇 번들링 (esbuild)...');
+console.log('[1/6] 봇 번들링 (esbuild)...');
 await build({
   entryPoints: [path.join(root, 'headless.js')],
   bundle: true,
@@ -30,42 +35,39 @@ await build({
   target: 'node22',
   outfile: bundle,
   external: ['zlib-sync', 'bufferutil', 'utf-8-validate', ...NATIVE_EXTERNALS],
-  // CJS 로 만들면 import.meta.url 이 undefined 가 되어 일부 의존성의
-  // createRequire(import.meta.url) 가 크래시한다 → 실제 파일 URL 로 주입.
   define: { 'import.meta.url': '__IMPORT_META_URL__' },
   banner: { js: "const __IMPORT_META_URL__ = require('url').pathToFileURL(__filename).href;" },
   logLevel: 'error',
 });
 
-// ② 번들 → bot.exe
-console.log('[2/5] 봇 exe 생성 (pkg)...');
+// ② 번들 → bot.exe (스테이징)
+console.log('[2/6] 봇 exe 생성 (pkg)...');
 const pkgBin = require.resolve('@yao-pkg/pkg/lib-es5/bin.js');
-execFileSync(
-  process.execPath,
-  [pkgBin, bundle, '--targets', 'node22-win-x64', '--output', path.join(botDir, 'bot.exe')],
-  { stdio: 'inherit' },
-);
+execFileSync(process.execPath, [pkgBin, bundle, '--targets', 'node22-win-x64', '--output', path.join(stage, 'bot.exe')], { stdio: 'inherit' });
 
-// ③ 네이티브 바이너리 + davey 사이드카
-console.log('[3/5] ffmpeg / yt-dlp / davey 복사...');
-fs.copyFileSync(require('ffmpeg-static'), path.join(botDir, 'ffmpeg.exe'));
-fs.copyFileSync(require('youtube-dl-exec').constants.YOUTUBE_DL_PATH, path.join(botDir, 'yt-dlp.exe'));
+// ③ ffmpeg / yt-dlp / davey 를 스테이징에
+console.log('[3/6] ffmpeg / yt-dlp / davey 복사...');
+fs.copyFileSync(require('ffmpeg-static'), path.join(stage, 'ffmpeg.exe'));
+fs.copyFileSync(require('youtube-dl-exec').constants.YOUTUBE_DL_PATH, path.join(stage, 'yt-dlp.exe'));
 for (const mod of NATIVE_EXTERNALS) {
   const src = path.join(root, 'node_modules', ...mod.split('/'));
-  if (fs.existsSync(src)) fs.cpSync(src, path.join(botDir, 'node_modules', ...mod.split('/')), { recursive: true });
+  if (fs.existsSync(src)) fs.cpSync(src, path.join(stage, 'node_modules', ...mod.split('/')), { recursive: true });
 }
 
-// ④ C# UI → appDir 로 직접 publish (프레임워크 의존, .NET 8 데스크톱 런타임 필요)
-console.log('[4/5] C# UI 빌드 (dotnet publish)...');
-execFileSync(
-  'dotnet',
-  ['publish', path.join(root, 'ui', 'YJMusicBot.csproj'), '-c', 'Release', '-o', appDir],
-  { stdio: 'inherit', shell: true },
-);
+// ④ 스테이징 → bot.zip (C# 내장 리소스)
+console.log('[4/6] bot.zip 압축...');
+execFileSync('powershell', ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}\\*' -DestinationPath '${botZip}' -Force`], { stdio: 'inherit' });
 
-// ⑤ 정리
-console.log('[5/5] 정리...');
+// ⑤ C# 단일 exe publish (bot.zip 내장)
+console.log('[5/6] C# 단일 exe 빌드 (dotnet publish)...');
+execFileSync('dotnet', ['publish', path.join(root, 'ui', 'YJMusicBot.csproj'), '-c', 'Release', '-o', pub], { stdio: 'inherit', shell: true });
+fs.copyFileSync(path.join(pub, 'YJMusicBot.exe'), finalExe);
+
+// ⑥ 정리
+console.log('[6/6] 정리...');
 fs.rmSync(bundle, { force: true });
-const mb = (p) => (fs.statSync(p).size / 1048576).toFixed(0);
-console.log(`\n완료 → ${appDir}`);
-console.log(`  YJMusicBot.exe (네이티브 창) + bot/bot.exe (${mb(path.join(botDir, 'bot.exe'))}MB) + ffmpeg + yt-dlp`);
+fs.rmSync(stage, { recursive: true, force: true });
+fs.rmSync(pub, { recursive: true, force: true });
+fs.rmSync(botZip, { force: true });
+const mb = (fs.statSync(finalExe).size / 1048576).toFixed(0);
+console.log(`\n완료 → ${finalExe} (${mb}MB, 단일 exe)`);

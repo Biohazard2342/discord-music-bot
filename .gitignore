@@ -21,3 +21,4 @@ creds.json
 # C# 빌드 산출물
 ui/bin/
 ui/obj/
+ui/Resources/

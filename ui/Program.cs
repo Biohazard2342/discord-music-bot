@@ -1,4 +1,4 @@
-namespace YJMusicBot;
+﻿namespace YJMusicBot;
 
 static class Program
 {

@@ -1,4 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using System.IO.Compression;
+using System.Reflection;
 using System.Text.Json;
 
 namespace YJMusicBot;
@@ -97,6 +99,36 @@ public class MainForm : Form
             Shown += async (_, _) => await StartBot();
     }
 
+    // 봇 exe 위치 결정:
+    //  - 폴더 배포(bot/bot.exe 옆에 있음) → 그거 사용
+    //  - 단일 exe(내장 bot.zip) → 첫 실행 때 %LOCALAPPDATA% 로 풀고 그 경로 사용
+    //  - 개발(둘 다 없음) → null 반환 → 호출부에서 node headless.js 폴백
+    private static string? ResolveBotExe()
+    {
+        var sidecar = Path.Combine(AppContext.BaseDirectory, "bot", "bot.exe");
+        if (File.Exists(sidecar)) return sidecar;
+
+        var asm = Assembly.GetExecutingAssembly();
+        using var stream = asm.GetManifestResourceStream("bot.zip");
+        if (stream == null) return null; // 개발 빌드 (내장 없음)
+
+        var ver = asm.GetName().Version?.ToString() ?? "0";
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "YJMusicBot", "runtime", ver);
+        var botExe = Path.Combine(dir, "bot.exe");
+        var marker = Path.Combine(dir, ".ready");
+        if (File.Exists(marker) && File.Exists(botExe)) return botExe;
+
+        // 첫 실행: 내장 zip 을 풀어둔다
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Read))
+            zip.ExtractToDirectory(dir, true);
+        File.WriteAllText(marker, "");
+        return botExe;
+    }
+
     private static Label Mk(string t, int x, int y) => new() { Text = t, ForeColor = Muted, AutoSize = true, Location = new Point(x, y) };
     private static void Style(TextBox t) { t.BackColor = Color.FromArgb(49, 51, 56); t.ForeColor = Fg; t.BorderStyle = BorderStyle.FixedSingle; }
 
@@ -137,7 +169,7 @@ public class MainForm : Form
 
         try
         {
-            var botExe = Path.Combine(AppContext.BaseDirectory, "bot", "bot.exe");
+            var botExe = ResolveBotExe();
             var psi = new ProcessStartInfo
             {
                 UseShellExecute = false,
@@ -145,7 +177,7 @@ public class MainForm : Form
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
-            if (File.Exists(botExe)) { psi.FileName = botExe; psi.WorkingDirectory = Path.GetDirectoryName(botExe)!; }
+            if (botExe != null && File.Exists(botExe)) { psi.FileName = botExe; psi.WorkingDirectory = Path.GetDirectoryName(botExe)!; }
             else { psi.FileName = "node"; psi.Arguments = "headless.js"; psi.WorkingDirectory = Environment.GetEnvironmentVariable("YJ_BOT_DIR") ?? AppContext.BaseDirectory; }
             psi.EnvironmentVariables["BOT_TOKEN"] = _token.Text.Trim();
             psi.EnvironmentVariables["CLIENT_ID"] = _clientId.Text.Trim();
