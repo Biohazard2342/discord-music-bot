@@ -194,8 +194,25 @@ class GuildMusicPlayer {
     }
   }
 
+  /** 음성채널에 사람이 없을 때: 잠시 뒤 자동 퇴장 예약 */
+  scheduleAloneLeave() {
+    this.cancelAloneLeave();
+    this._aloneTimer = setTimeout(() => {
+      console.log(`[${this.guild?.name}] 음성채널에 아무도 없어 자동 퇴장`);
+      this.stop();
+    }, 30000); // 30초 뒤 (그 전에 누가 들어오면 취소)
+  }
+
+  cancelAloneLeave() {
+    if (this._aloneTimer) {
+      clearTimeout(this._aloneTimer);
+      this._aloneTimer = null;
+    }
+  }
+
   /** 사용자 정지: 대기열 비우고 음성 연결 해제 (플레이어 객체/패널은 유지) */
   stop() {
+    this.cancelAloneLeave();
     this.queue = [];
     this.current = null;
     this.paused = false;
@@ -210,6 +227,7 @@ class GuildMusicPlayer {
 
   /** 완전 제거 (음성 연결 끊김 등) */
   destroy() {
+    this.cancelAloneLeave();
     this._killProc();
     try {
       this.connection?.destroy();

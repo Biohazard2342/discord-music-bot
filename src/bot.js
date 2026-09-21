@@ -244,8 +244,22 @@ function buildClient() {
   });
   c.on(Events.GuildCreate, onGuildCreate);
   c.on(Events.InteractionCreate, onInteraction);
+  c.on(Events.VoiceStateUpdate, onVoiceStateUpdate);
   c.on(Events.Error, (e) => console.error('클라이언트 오류:', e.message));
   return c;
+}
+
+// 봇이 있는 음성채널에 사람(봇 제외)이 아무도 없으면 자동 퇴장 예약
+function onVoiceStateUpdate(oldState, newState) {
+  const guild = newState.guild ?? oldState.guild;
+  const player = getExistingPlayer(guild.id);
+  if (!player?.connection) return;
+  const botChannelId = player.connection.joinConfig.channelId;
+  const channel = guild.channels.cache.get(botChannelId);
+  if (!channel) return;
+  const humans = channel.members.filter((m) => !m.user.bot).size;
+  if (humans === 0) player.scheduleAloneLeave();
+  else player.cancelAloneLeave();
 }
 
 // ---------- 외부 제어 API ----------
