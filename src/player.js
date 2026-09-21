@@ -65,7 +65,7 @@ class GuildMusicPlayer {
     this.connection.subscribe(this.player);
 
     entersState(this.connection, VoiceConnectionStatus.Ready, 15000).catch(() =>
-      console.error('❌ 음성 연결이 15초 내 Ready 안 됨 — 방화벽/UDP 차단 의심'),
+      console.error(`[${this.guild?.name}] 음성 연결 Ready 실패(15s) — 방화벽/UDP 의심`),
     );
 
     this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
@@ -134,6 +134,8 @@ class GuildMusicPlayer {
     );
     this.currentFfmpeg = ffmpeg;
     ffmpeg.on('error', (e) => console.error('ffmpeg 실행 실패:', e?.message ?? e));
+    ffmpeg.on('close', (code) => console.log(`[${this.guild?.name}] ffmpeg 종료 code=${code} (파일=${!!inputFile})`));
+    console.log(`[${this.guild?.name}] ▶ 재생 시작: ${track.title} (${inputFile ? '캐시' : '스트리밍'})`);
 
     if (!inputFile) {
       const proc = createStream(track.url);

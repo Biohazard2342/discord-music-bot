@@ -21,7 +21,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { getPlayer, getExistingPlayer } from './player.js';
-import { resolveSingle, resolvePlaylist, isPlaylistUrl } from './ytsource.js';
+import { resolveSingle, resolvePlaylist, isPlaylistUrl, updateYtdlp } from './ytsource.js';
 import {
   panelEmbed,
   panelRows,
@@ -269,6 +269,7 @@ async function _startBot(creds) {
   if (!token || !clientId) throw new Error('봇 토큰과 Application ID를 입력해 주세요.');
 
   state.lastError = null;
+  updateYtdlp(); // 유튜브 변화 대응: yt-dlp 최신 유지 (논블로킹)
   try {
     await registerCommands(token, clientId, guildId);
     client = buildClient();

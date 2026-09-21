@@ -1,18 +1,25 @@
 // yt-dlp(youtube-dl-exec) 래퍼: 곡 정보 조회 + 오디오 스트림/캐시 다운로드
 import ytdlPkg from 'youtube-dl-exec';
-import { createHash } from 'node:crypto';
-
-// asar 패키징 시 아카이브 안의 exe 는 실행 불가 → unpacked 경로로 보정
-const YTDLP_BIN = ytdlPkg.constants.YOUTUBE_DL_PATH.replace('app.asar', 'app.asar.unpacked');
-const ytdl = ytdlPkg.create(YTDLP_BIN);
-
-// ffmpeg 도 동일하게 unpacked 경로로. prism-media 의 자동 탐색은
-// require('ffmpeg-static') 결과(asar 내부 경로)를 실행하려다 실패하므로 쓰지 않는다.
 import ffmpegStatic from 'ffmpeg-static';
-export const FFMPEG_BIN = (ffmpegStatic ?? 'ffmpeg').replace('app.asar', 'app.asar.unpacked');
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+
+// 바이너리 위치:
+//  - 일반 실행(node): node_modules 안 원본 경로
+//  - 단일 exe(pkg): exe 와 같은 폴더에 둔 ffmpeg.exe / yt-dlp.exe (사이드카)
+function binPath(devPath, exeName) {
+  if (process.pkg) return path.join(path.dirname(process.execPath), exeName);
+  return devPath;
+}
+
+const YTDLP_BIN = binPath(ytdlPkg.constants.YOUTUBE_DL_PATH, 'yt-dlp.exe');
+const ytdl = ytdlPkg.create(YTDLP_BIN);
+
+// prism-media 자동탐색을 안 쓰고, player.js 가 이 경로로 ffmpeg 를 직접 spawn 한다.
+export const FFMPEG_BIN = binPath(ffmpegStatic ?? 'ffmpeg', 'ffmpeg.exe');
 
 // yt-dlp 공통 플래그
 const common = {
@@ -46,22 +53,55 @@ export function downloadTrack(url) {
 
   const p = (async () => {
     const part = `${file}.part`;
-    try {
-      fs.rmSync(part, { force: true });
-    } catch {}
-    await ytdl(url, {
-      output: part,
-      format: 'bestaudio[ext=webm]/bestaudio/best',
-      noPlaylist: true,
-      quiet: true,
-      ...common,
-    });
-    fs.renameSync(part, file);
-    pruneCache();
-    return file;
+    let lastErr;
+    // 유튜브가 간헐적으로 403 을 주므로 2회 재시도
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        fs.rmSync(part, { force: true });
+      } catch {}
+      try {
+        await ytdl(url, {
+          output: part,
+          format: 'bestaudio[ext=webm]/bestaudio/best',
+          noPlaylist: true,
+          quiet: true,
+          retries: 3,
+          fragmentRetries: 3,
+          ...common,
+        });
+        if (fs.existsSync(part) && fs.statSync(part).size > 0) {
+          fs.renameSync(part, file);
+          pruneCache();
+          return file;
+        }
+        throw new Error('빈 파일');
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 800));
+      }
+    }
+    throw lastErr;
   })().finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
+}
+
+// yt-dlp 자체 업데이트 (베스트에포트, 논블로킹). 유튜브가 계속 바뀌므로
+// 봇 시작 시 최신으로 유지해야 403/재생불가가 안 생긴다.
+let updated = false;
+export function updateYtdlp() {
+  if (updated) return;
+  updated = true;
+  try {
+    const proc = spawn(YTDLP_BIN, ['-U'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    proc.stdout.on('data', (d) => (out += d));
+    proc.on('close', () => {
+      const line = out.trim().split('\n').pop();
+      if (line) console.log('yt-dlp 업데이트:', line);
+    });
+    proc.on('error', () => {});
+  } catch {}
 }
 
 /** 캐시가 무한정 커지지 않게 최근 파일만 유지 */
