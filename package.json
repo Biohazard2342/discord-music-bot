@@ -1,14 +1,13 @@
 {
   "name": "discord-music-bot",
-  "version": "1.0.0",
-  "description": "버튼/모달 UI 기반 디스코드 음악봇 + Electron 컨트롤 패널 (discord.js v14, yt-dlp 자체 내장 재생)",
+  "version": "2.0.0",
+  "description": "디스코드 음악봇 (discord.js v14, yt-dlp 자체 내장 재생) + 로컬 웹 컨트롤 패널",
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js",
-    "panel": "electron .",
-    "dist": "electron-builder --win nsis"
+    "start": "node server.js",
+    "cli": "node index.js",
+    "dev": "node --watch server.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -19,39 +18,5 @@
     "libsodium-wrappers": "^0.8.4",
     "opusscript": "^0.0.8",
     "youtube-dl-exec": "^3.1.8"
-  },
-  "build": {
-    "appId": "com.yj.musicbot",
-    "productName": "YJ Music Bot",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/ffmpeg-static/**",
-      "node_modules/youtube-dl-exec/bin/**"
-    ],
-    "compression": "maximum",
-    "electronLanguages": ["ko", "en-US"],
-    "files": [
-      "**/*",
-      "!**/*.log",
-      "!.env",
-      "!.env.example",
-      "!.claude/**",
-      "!.git/**",
-      "!dist/**"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "createDesktopShortcut": true,
-      "runAfterFinish": true,
-      "artifactName": "YJ-MusicBot-Setup.exe"
-    }
-  },
-  "devDependencies": {
-    "electron": "^42.5.0",
-    "electron-builder": "^26.15.3"
   }
 }

@@ -14,3 +14,6 @@ dist/
 
 # 에디터/도구 설정
 .claude/
+
+# 로컬 자격증명(웹패널)
+creds.json

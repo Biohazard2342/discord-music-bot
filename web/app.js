@@ -1,4 +1,4 @@
-// 컨트롤 패널 UI 로직
+// 컨트롤 패널 UI — 로컬 서버(server.js)와 fetch 로 통신
 const $ = (id) => document.getElementById(id);
 
 const statusPill = $('statusPill');
@@ -13,10 +13,17 @@ const guildCount = $('guildCount');
 
 let busy = false;
 
-function setBusy(b) {
-  busy = b;
-  startBtn.disabled = b || statusPill.classList.contains('on');
-  stopBtn.disabled = b || !statusPill.classList.contains('on');
+async function api(path, method = 'GET', body) {
+  const opt = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  return r.json();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+  );
 }
 
 function render(status) {
@@ -52,27 +59,22 @@ function render(status) {
   }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
-  );
-}
-
-// ---------- 버튼 ----------
 startBtn.addEventListener('click', async () => {
   errBox.textContent = '';
-  setBusy(true);
+  busy = true;
+  startBtn.disabled = true;
   statusText.textContent = '켜는 중...';
   const creds = {
     token: $('token').value.trim() || undefined,
     clientId: $('clientId').value.trim() || undefined,
     guildId: $('guildId').value.trim() || undefined,
   };
-  const res = await window.api.start(creds);
-  setBusy(false);
+  const res = await api('/api/start', 'POST', creds);
+  busy = false;
   if (!res.ok) {
     errBox.textContent = '⚠️ ' + res.error;
     statusText.textContent = '오프라인';
+    startBtn.disabled = false;
     return;
   }
   render(res.status);
@@ -80,10 +82,11 @@ startBtn.addEventListener('click', async () => {
 
 stopBtn.addEventListener('click', async () => {
   errBox.textContent = '';
-  setBusy(true);
+  busy = true;
+  stopBtn.disabled = true;
   statusText.textContent = '끄는 중...';
-  const res = await window.api.stop();
-  setBusy(false);
+  const res = await api('/api/stop', 'POST', {});
+  busy = false;
   render(res.status);
 });
 
@@ -93,19 +96,17 @@ $('saveBtn').addEventListener('click', async () => {
     clientId: $('clientId').value.trim(),
     guildId: $('guildId').value.trim(),
   };
-  await window.api.saveCreds(creds);
+  await api('/api/creds', 'POST', creds);
   const msg = $('saveMsg');
   msg.textContent = '✅ 저장됨';
   setTimeout(() => (msg.textContent = ''), 2000);
 });
 
-// ---------- 초기 로드 + 주기적 갱신 ----------
 async function init() {
-  const creds = await window.api.getCreds();
+  const creds = await api('/api/creds');
   $('token').value = creds.token || '';
   $('clientId').value = creds.clientId || '';
   $('guildId').value = creds.guildId || '';
-  // 토큰이 없으면 설정 영역을 펼쳐서 안내
   if (!creds.token || !creds.clientId) $('credBox').open = true;
   refresh();
 }
@@ -113,8 +114,7 @@ async function init() {
 async function refresh() {
   if (busy) return;
   try {
-    const status = await window.api.status();
-    render(status);
+    render(await api('/api/status'));
   } catch {}
 }
 
