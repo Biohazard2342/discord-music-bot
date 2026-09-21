@@ -17,3 +17,7 @@ dist/
 
 # 로컬 자격증명(웹패널)
 creds.json
+
+# C# 빌드 산출물
+ui/bin/
+ui/obj/

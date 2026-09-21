@@ -1,13 +1,13 @@
 {
   "name": "discord-music-bot",
-  "version": "2.0.0",
-  "description": "디스코드 음악봇 (discord.js v14, yt-dlp 자체 내장 재생) + 로컬 웹 컨트롤 패널",
+  "version": "3.0.0",
+  "description": "디스코드 음악봇 (discord.js v14, yt-dlp 자체 내장 재생) + C# 네이티브 컨트롤 창",
   "type": "module",
-  "main": "server.js",
+  "main": "headless.js",
   "scripts": {
-    "start": "node server.js",
-    "cli": "node index.js",
-    "dev": "node --watch server.js"
+    "start": "node headless.js",
+    "dev": "node --watch headless.js",
+    "build": "node scripts/build.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -18,5 +18,9 @@
     "libsodium-wrappers": "^0.8.4",
     "opusscript": "^0.0.8",
     "youtube-dl-exec": "^3.1.8"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.22.0",
+    "esbuild": "^0.28.2"
   }
 }
