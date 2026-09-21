@@ -47,7 +47,7 @@ function render(status) {
     for (const g of guilds) {
       const tr = document.createElement('tr');
       const playing = g.playing
-        ? `<span class="playing">${g.paused ? '⏸️ ' : '▶️ '}${escapeHtml(g.playing)}</span>`
+        ? `<span class="playing">${g.paused ? '(일시정지) ' : ''}${escapeHtml(g.playing)}</span>`
         : '<span class="badge">—</span>';
       tr.innerHTML =
         `<td>${escapeHtml(g.name)}</td>` +
@@ -72,7 +72,7 @@ startBtn.addEventListener('click', async () => {
   const res = await api('/api/start', 'POST', creds);
   busy = false;
   if (!res.ok) {
-    errBox.textContent = '⚠️ ' + res.error;
+    errBox.textContent = res.error;
     statusText.textContent = '오프라인';
     startBtn.disabled = false;
     return;
@@ -98,7 +98,7 @@ $('saveBtn').addEventListener('click', async () => {
   };
   await api('/api/creds', 'POST', creds);
   const msg = $('saveMsg');
-  msg.textContent = '✅ 저장됨';
+  msg.textContent = '저장됨';
   setTimeout(() => (msg.textContent = ''), 2000);
 });
 
