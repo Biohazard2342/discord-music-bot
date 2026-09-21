@@ -87,11 +87,8 @@ export function downloadTrack(url) {
 }
 
 // yt-dlp 자체 업데이트 (베스트에포트, 논블로킹). 유튜브가 계속 바뀌므로
-// 봇 시작 시 최신으로 유지해야 403/재생불가가 안 생긴다.
-let updated = false;
-export function updateYtdlp() {
-  if (updated) return;
-  updated = true;
+// 최신으로 유지해야 403/재생불가가 안 생긴다.
+function runYtdlpUpdate() {
   try {
     const proc = spawn(YTDLP_BIN, ['-U'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     let out = '';
@@ -102,6 +99,18 @@ export function updateYtdlp() {
     });
     proc.on('error', () => {});
   } catch {}
+}
+
+let scheduled = false;
+export function updateYtdlp() {
+  runYtdlpUpdate(); // 켤 때 즉시 1회
+  if (scheduled) return; // 24시간 서버 대비: 12시간마다 주기 갱신 (1회만 등록)
+  scheduled = true;
+  const iv = setInterval(() => {
+    if (inflight.size > 0) return; // 다운로드 중이면 파일 잠김 → 이번 주기 건너뜀
+    runYtdlpUpdate();
+  }, 12 * 60 * 60 * 1000);
+  iv.unref?.();
 }
 
 /** 캐시가 무한정 커지지 않게 최근 파일만 유지 */
